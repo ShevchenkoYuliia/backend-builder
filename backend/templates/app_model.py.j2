@@ -1,0 +1,38 @@
+{% if db_is_sql %}
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Table, Text
+from sqlalchemy.orm import relationship
+
+from app.database import Base
+
+{% if entity.sql_model_pre_lines %}
+{% for block in entity.sql_model_pre_lines %}
+{{ block }}
+{% endfor %}
+{% endif %}
+
+
+class {{ entity.name }}(Base):
+    __tablename__ = "{{ entity.table_name }}"
+
+    id = Column(Integer, primary_key=True, index=True)
+{% for line in entity.sql_model_column_lines %}
+{{ line }}
+{% endfor %}
+{% if entity.sql_model_relationship_lines %}
+{% for line in entity.sql_model_relationship_lines %}
+{{ line }}
+{% endfor %}
+{% endif %}
+{% else %}
+from pydantic import BaseModel, Field
+
+
+class {{ entity.name }}Document(BaseModel):
+{% if entity.mongo_document_lines %}
+{% for line in entity.mongo_document_lines %}
+    {{ line.split(':')[0] | replace('"', '') }}: object | None = None
+{% endfor %}
+{% else %}
+    pass
+{% endif %}
+{% endif %}

@@ -1,0 +1,18 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
+{% if db_is_sql %}
+sqlalchemy>=2.0.0
+{% if project.db_type.value == "postgresql" %}
+psycopg[binary]>=3.2.0
+{% else %}
+PyMySQL[rsa]>=1.1.0
+cryptography>=42.0.0
+{% endif %}
+{% else %}
+motor>=3.4.0
+{% endif %}
+{% if project.include_auth %}
+pyjwt>=2.8.0
+{% endif %}
+

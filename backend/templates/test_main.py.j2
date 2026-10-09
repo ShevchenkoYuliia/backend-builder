@@ -1,0 +1,31 @@
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.database import Base, engine, SessionLocal
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_db():
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
+
+@pytest.fixture
+def client():
+    return TestClient(app)
+
+def test_health_check(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+{% for entity in entity_contexts %}
+def test_{{ entity.slug }}_crud(client):
+    create_payload = {
+        {% for field in entity.schema_base_lines %}
+        {% endfor %}
+    }
+    response = client.get("{{ entity.route_prefix }}")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+{% endfor %}

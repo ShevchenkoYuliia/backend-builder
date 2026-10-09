@@ -1,0 +1,31 @@
+# {{ project_name }}
+
+Generated on {{ generated_at }} by Backend Builder Platform.
+
+## What is included
+
+- FastAPI application scaffold
+- CRUD routes for each entity
+- Dockerfile and docker-compose stack
+- AI endpoint slots for custom business logic
+- Project DSL snapshot in `project-spec.json`
+
+## Run locally
+
+1. Copy `.env.example` into `.env` and adjust credentials if needed.
+2. Start with `docker compose up --build`.
+3. Open `http://localhost:8000/docs`.
+
+## Entities
+{% for entity in entity_contexts %}
+
+### {{ entity.name }}
+{% if entity.relationship_summary %}
+Relations:
+{% for line in entity.relationship_summary %}
+{{ line }}
+{% endfor %}
+{% else %}
+No relations configured.
+{% endif %}
+{% endfor %}

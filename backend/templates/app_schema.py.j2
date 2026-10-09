@@ -1,0 +1,37 @@
+{% if entity.has_datetime %}
+from datetime import datetime
+{% endif %}
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class {{ entity.name }}Base(BaseModel):
+{% if entity.schema_base_lines %}
+{% for line in entity.schema_base_lines %}
+{{ line }}
+{% endfor %}
+{% else %}
+    pass
+{% endif %}
+
+
+class {{ entity.name }}Create({{ entity.name }}Base):
+    pass
+
+
+class {{ entity.name }}Update(BaseModel):
+{% if entity.schema_update_lines %}
+{% for line in entity.schema_update_lines %}
+{{ line }}
+{% endfor %}
+{% else %}
+    pass
+{% endif %}
+
+
+class {{ entity.name }}Read({{ entity.name }}Base):
+{% if db_is_sql %}
+    id: int
+{% else %}
+    id: str
+{% endif %}
+    model_config = ConfigDict(from_attributes=True)

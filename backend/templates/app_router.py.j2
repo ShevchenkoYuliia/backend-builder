@@ -1,0 +1,163 @@
+{% if db_is_sql %}
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.database import SessionDep
+from app.models.{{ entity.slug }} import {{ entity.name }}
+{% if entity.sql_router_target_imports %}
+{% for target_slug, target_name in entity.sql_router_target_imports %}
+from app.models.{{ target_slug }} import {{ target_name }}
+{% endfor %}
+{% endif %}
+from app.schemas.{{ entity.slug }} import {{ entity.name }}Create, {{ entity.name }}Read, {{ entity.name }}Update
+import app.schemas.{{ entity.slug }} as schemas
+
+router = APIRouter()
+
+
+def _serialize(item: {{ entity.name }}) -> dict:
+    return {
+        "id": item.id,
+{% for line in entity.sql_router_serialize_lines %}
+{{ line }}
+{% endfor %}
+    }
+
+
+@router.get("", response_model=list[{{ entity.name }}Read])
+def list_{{ entity.collection_name }}(db: SessionDep):
+    return [_serialize(item) for item in db.query({{ entity.name }}).all()]
+
+
+@router.get("/{item_id}", response_model={{ entity.name }}Read)
+def get_{{ entity.slug }}(item_id: int, db: SessionDep):
+    item = db.query({{ entity.name }}).filter({{ entity.name }}.id == item_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="{{ entity.name }} not found.")
+    return _serialize(item)
+
+
+@router.post("", response_model={{ entity.name }}Read, status_code=status.HTTP_201_CREATED)
+def create_{{ entity.slug }}(payload: {{ entity.name }}Create, db: SessionDep):
+    item = {{ entity.name }}(
+{% if entity.sql_collection_payload_fields %}
+        **payload.model_dump(exclude={ {% for field_name in entity.sql_collection_payload_fields %}"{{ field_name }}"{% if not loop.last %}, {% endif %}{% endfor %} })
+{% else %}
+        **payload.model_dump()
+{% endif %}
+    )
+    db.add(item)
+    db.flush()
+{% if entity.sql_collection_relation_blocks_create %}
+{% for block in entity.sql_collection_relation_blocks_create %}
+{{ block | indent(4, true) }}
+{% endfor %}
+{% endif %}
+    db.commit()
+    db.refresh(item)
+    return _serialize(item)
+
+
+@router.put("/{item_id}", response_model={{ entity.name }}Read)
+def update_{{ entity.slug }}(item_id: int, payload: {{ entity.name }}Update, db: SessionDep):
+    item = db.query({{ entity.name }}).filter({{ entity.name }}.id == item_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="{{ entity.name }} not found.")
+{% if entity.sql_collection_payload_fields %}
+    update_data = payload.model_dump(
+        exclude_unset=True,
+        exclude={ {% for field_name in entity.sql_collection_payload_fields %}"{{ field_name }}"{% if not loop.last %}, {% endif %}{% endfor %} },
+    )
+{% else %}
+    update_data = payload.model_dump(exclude_unset=True)
+{% endif %}
+    for key, value in update_data.items():
+        setattr(item, key, value)
+{% if entity.sql_collection_relation_blocks_update %}
+{% for block in entity.sql_collection_relation_blocks_update %}
+{{ block | indent(4, true) }}
+{% endfor %}
+{% endif %}
+    db.commit()
+    db.refresh(item)
+    return _serialize(item)
+
+
+@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_{{ entity.slug }}(item_id: int, db: SessionDep):
+    item = db.query({{ entity.name }}).filter({{ entity.name }}.id == item_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="{{ entity.name }} not found.")
+    db.delete(item)
+    db.commit()
+    return None
+{% else %}
+from bson import ObjectId
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
+
+from app.database import database
+from app.schemas.{{ entity.slug }} import {{ entity.name }}Create, {{ entity.name }}Read, {{ entity.name }}Update
+import app.schemas.{{ entity.slug }} as schemas
+
+router = APIRouter()
+collection = database["{{ entity.collection_name }}"]
+
+
+def _serialize(document: dict) -> dict:
+    return {"id": str(document["_id"]), **{k: v for k, v in document.items() if k != "_id"}}
+
+
+@router.get("", response_model=list[{{ entity.name }}Read])
+async def list_{{ entity.collection_name }}():
+    items: list[dict] = []
+    async for document in collection.find():
+        items.append(_serialize(document))
+    return items
+
+
+@router.get("/{item_id}", response_model={{ entity.name }}Read)
+async def get_{{ entity.slug }}(item_id: str):
+    document = await collection.find_one({"_id": ObjectId(item_id)})
+    if document is None:
+        raise HTTPException(status_code=404, detail="{{ entity.name }} not found.")
+    return _serialize(document)
+
+
+@router.post("", response_model={{ entity.name }}Read, status_code=status.HTTP_201_CREATED)
+async def create_{{ entity.slug }}(payload: {{ entity.name }}Create):
+    document = {
+{% for line in entity.mongo_document_lines %}
+{{ line }}
+{% endfor %}
+    }
+    result = await collection.insert_one(document)
+    created = await collection.find_one({"_id": result.inserted_id})
+    return _serialize(created)
+
+
+@router.put("/{item_id}", response_model={{ entity.name }}Read)
+async def update_{{ entity.slug }}(item_id: str, payload: {{ entity.name }}Update):
+    document = await collection.find_one({"_id": ObjectId(item_id)})
+    if document is None:
+        raise HTTPException(status_code=404, detail="{{ entity.name }} not found.")
+    update_data = payload.model_dump(exclude_unset=True)
+    await collection.update_one({"_id": ObjectId(item_id)}, {"$set": update_data})
+    updated = await collection.find_one({"_id": ObjectId(item_id)})
+    return _serialize(updated)
+
+
+@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_{{ entity.slug }}(item_id: str):
+    document = await collection.find_one({"_id": ObjectId(item_id)})
+    if document is None:
+        raise HTTPException(status_code=404, detail="{{ entity.name }} not found.")
+    await collection.delete_one({"_id": ObjectId(item_id)})
+    return None
+{% endif %}
+
+{% if entity.custom_endpoints_code %}
+
+{{ entity.custom_endpoints_code }}
+{% endif %}

@@ -1,0 +1,70 @@
+version: "3.9"
+services:
+  {{ project_slug }}_app:
+    build: .
+    container_name: {{ project_slug }}_app
+    restart: always
+    expose:
+      - "8000"
+    environment:
+{% if project.db_type.value == "postgresql" %}
+      - DATABASE_URL=postgresql+psycopg://app:app@{{ project_slug }}_db:5432/{{ project_slug }}
+{% elif project.db_type.value == "mysql" %}
+      - DATABASE_URL=mysql+pymysql://app:app@{{ project_slug }}_db:3306/{{ project_slug }}
+{% else %}
+      - MONGO_URL=mongodb://{{ project_slug }}_db:27017
+      - MONGO_DB_NAME={{ project_slug }}
+{% endif %}
+    depends_on:
+      - {{ project_slug }}_db
+    networks:
+      - paas_network
+
+  {{ project_slug }}_db:
+{% if project.db_type.value == "postgresql" %}
+    image: postgres:16
+    container_name: {{ project_slug }}_db
+    restart: always
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: {{ project_slug }}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - paas_network
+{% elif project.db_type.value == "mysql" %}
+    image: mysql:8
+    container_name: {{ project_slug }}_db
+    restart: always
+    environment:
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+      MYSQL_DATABASE: {{ project_slug }}
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - paas_network
+{% else %}
+    image: mongo:7
+    container_name: {{ project_slug }}_db
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - paas_network
+{% endif %}
+
+volumes:
+{% if project.db_type.value == "postgresql" %}
+  postgres_data:
+{% elif project.db_type.value == "mysql" %}
+  mysql_data:
+{% else %}
+  mongo_data:
+{% endif %}
+
+networks:
+  paas_network:
+    external: true
